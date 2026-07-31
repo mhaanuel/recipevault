@@ -740,7 +740,7 @@ function App() {
       </div>
 
       {showAdd && <AddRecipeModal onClose={() => setShowAdd(false)} onSave={handleSave} onNeedApiKey={() => { setShowAdd(false); setShowSettings(true); }} />}
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} onSaved={() => setHasKey(true)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} onSaved={() => reload()} />}
     </div>
   );
 }
