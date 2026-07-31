@@ -100,22 +100,9 @@ const SAMPLE_RECIPES = [
   },
 ];
 
-const STORAGE_KEY_RECIPES = "recipevault_recipes";
 const STORAGE_KEY_APIKEY = "recipevault_api_key";
-
-const loadRecipes = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_RECIPES);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  return SAMPLE_RECIPES;
-};
-
-const saveRecipes = (recipes) => {
-  try {
-    localStorage.setItem(STORAGE_KEY_RECIPES, JSON.stringify(recipes));
-  } catch (e) {}
-};
+const STORAGE_KEY_WEBAPP = "recipevault_webapp_url";
+const STORAGE_KEY_SECRET = "recipevault_webapp_secret";
 
 const getApiKey = () => {
   try {
@@ -129,6 +116,72 @@ const setApiKey = (key) => {
   try {
     localStorage.setItem(STORAGE_KEY_APIKEY, key);
   } catch (e) {}
+};
+
+const getWebAppUrl = () => {
+  try {
+    return localStorage.getItem(STORAGE_KEY_WEBAPP) || "";
+  } catch (e) {
+    return "";
+  }
+};
+
+const setWebAppUrl = (url) => {
+  try {
+    localStorage.setItem(STORAGE_KEY_WEBAPP, url);
+  } catch (e) {}
+};
+
+const getSecret = () => {
+  try {
+    return localStorage.getItem(STORAGE_KEY_SECRET) || "";
+  } catch (e) {
+    return "";
+  }
+};
+
+const setSecret = (s) => {
+  try {
+    localStorage.setItem(STORAGE_KEY_SECRET, s);
+  } catch (e) {}
+};
+
+const fetchRecipes = async () => {
+  const url = getWebAppUrl();
+  if (!url) return SAMPLE_RECIPES;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.ok) return data.recipes;
+    return SAMPLE_RECIPES;
+  } catch (e) {
+    console.error("Errore lettura foglio:", e);
+    return SAMPLE_RECIPES;
+  }
+};
+
+const addRecipeRemote = async (recipe) => {
+  const url = getWebAppUrl();
+  if (!url) throw new Error("NO_WEBAPP_URL");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ secret: getSecret(), action: "add", recipe }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || "Errore salvataggio");
+};
+
+const deleteRecipeRemote = async (id) => {
+  const url = getWebAppUrl();
+  if (!url) throw new Error("NO_WEBAPP_URL");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ secret: getSecret(), action: "delete", id }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || "Errore eliminazione");
 };
 
 const API_CALL = async (url, recipeText) => {
@@ -365,36 +418,66 @@ const RecipeDetail = ({ recipe, onBack, onDelete }) => {
 // ─── SETTINGS MODAL (API KEY) ────────────────────────────────────────────────
 const SettingsModal = ({ onClose, onSaved }) => {
   const [key, setKey] = useState(getApiKey());
+  const [webapp, setWebapp] = useState(getWebAppUrl());
+  const [secret, setSecretVal] = useState(getSecret());
 
   const handleSave = () => {
     setApiKey(key.trim());
+    setWebAppUrl(webapp.trim());
+    setSecret(secret.trim());
     onSaved();
     onClose();
   };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ background: COLORS.bg, borderRadius: 24, width: "100%", maxWidth: 380, padding: "24px 20px" }}>
+      <div style={{ background: COLORS.bg, borderRadius: 24, width: "100%", maxWidth: 380, padding: "24px 20px", maxHeight: "88vh", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: COLORS.green }}>🔑 API Key Anthropic</h2>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: COLORS.green }}>⚙️ Impostazioni</h2>
           <button onClick={onClose} style={{ background: COLORS.greenLight, border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Icon name="x" size={14} color={COLORS.green} />
           </button>
         </div>
-        <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 14, lineHeight: 1.5 }}>
-          Serve per estrarre le ricette con l'AI. Viene salvata solo su questo dispositivo (localStorage del browser), non viene mai inviata altrove se non ad Anthropic per l'estrazione.
+
+        <p style={{ fontSize: 13, fontWeight: 700, color: COLORS.green, marginBottom: 6 }}>🔑 API Key Anthropic</p>
+        <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 10, lineHeight: 1.5 }}>
+          Serve per estrarre le ricette con l'AI. Resta solo su questo dispositivo.
         </p>
         <input
           type="password"
           value={key}
           onChange={(e) => setKey(e.target.value)}
           placeholder="sk-ant-..."
+          style={{ width: "100%", padding: "14px 16px", borderRadius: 14, border: `2px solid ${COLORS.greenBorder}`, background: COLORS.card, fontSize: 14, color: COLORS.text, outline: "none", boxSizing: "border-box", fontFamily: "inherit", marginBottom: 18 }}
+        />
+
+        <p style={{ fontSize: 13, fontWeight: 700, color: COLORS.green, marginBottom: 6 }}>📊 URL foglio Google (sincronizzazione)</p>
+        <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 10, lineHeight: 1.5 }}>
+          L'URL di distribuzione dell'Apps Script collegato al foglio RecipeVaultDB. Stesso URL su tutti i dispositivi per avere le ricette sincronizzate.
+        </p>
+        <input
+          value={webapp}
+          onChange={(e) => setWebapp(e.target.value)}
+          placeholder="https://script.google.com/macros/s/.../exec"
+          style={{ width: "100%", padding: "14px 16px", borderRadius: 14, border: `2px solid ${COLORS.greenBorder}`, background: COLORS.card, fontSize: 13, color: COLORS.text, outline: "none", boxSizing: "border-box", fontFamily: "inherit", marginBottom: 18 }}
+        />
+
+        <p style={{ fontSize: 13, fontWeight: 700, color: COLORS.green, marginBottom: 6 }}>🔒 Parola segreta</p>
+        <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 10, lineHeight: 1.5 }}>
+          La stessa impostata nello script (variabile SECRET), per evitare scritture non autorizzate sul foglio.
+        </p>
+        <input
+          type="password"
+          value={secret}
+          onChange={(e) => setSecretVal(e.target.value)}
+          placeholder="parola segreta"
           style={{ width: "100%", padding: "14px 16px", borderRadius: 14, border: `2px solid ${COLORS.greenBorder}`, background: COLORS.card, fontSize: 14, color: COLORS.text, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
         />
+
         <button
           onClick={handleSave}
           disabled={!key.trim()}
-          style={{ marginTop: 16, width: "100%", padding: "14px", background: !key.trim() ? COLORS.greenBorder : COLORS.green, color: "white", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: !key.trim() ? "not-allowed" : "pointer" }}
+          style={{ marginTop: 18, width: "100%", padding: "14px", background: !key.trim() ? COLORS.greenBorder : COLORS.green, color: "white", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: !key.trim() ? "not-allowed" : "pointer" }}
         >
           Salva
         </button>
@@ -521,20 +604,30 @@ const AddRecipeModal = ({ onClose, onSave, onNeedApiKey }) => {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 function App() {
-  const [recipes, setRecipes] = useState(loadRecipes());
+  const [recipes, setRecipes] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("Tutti");
-  const [hasKey, setHasKey] = useState(!!getApiKey());
+  const [syncError, setSyncError] = useState("");
+
+  const reload = async () => {
+    setLoading(true);
+    setSyncError("");
+    try {
+      const data = await fetchRecipes();
+      setRecipes(data);
+    } catch (e) {
+      setSyncError("Impossibile leggere dal foglio Google. Controlla URL e connessione.");
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    saveRecipes(recipes);
-  }, [recipes]);
-
-  useEffect(() => {
-    if (!getApiKey()) setShowSettings(true);
+    if (!getApiKey() || !getWebAppUrl()) setShowSettings(true);
+    reload();
   }, []);
 
   const filtered = recipes.filter((r) => {
@@ -545,13 +638,24 @@ function App() {
 
   const allTags = ["Tutti", ...new Set(recipes.flatMap((r) => r.tags))];
 
-  const handleSave = (recipe) => {
-    setRecipes((prev) => [recipe, ...prev]);
-    setShowAdd(false);
+  const handleSave = async (recipe) => {
+    try {
+      await addRecipeRemote(recipe);
+      setShowAdd(false);
+      reload();
+    } catch (e) {
+      setSyncError("Ricetta estratta ma non salvata sul foglio: " + e.message);
+      setShowAdd(false);
+    }
   };
 
-  const handleDelete = (id) => {
-    setRecipes((prev) => prev.filter((r) => r.id !== id));
+  const handleDelete = async (id) => {
+    try {
+      await deleteRecipeRemote(id);
+      reload();
+    } catch (e) {
+      setSyncError("Impossibile eliminare dal foglio: " + e.message);
+    }
   };
 
   if (selected) return <RecipeDetail recipe={selected} onBack={() => setSelected(null)} onDelete={handleDelete} />;
@@ -605,10 +709,20 @@ function App() {
             </button>
           ))}
         </div>
+
+        {syncError && (
+          <div style={{ background: "#FDECEA", border: "1px solid #E8642A", borderRadius: 12, padding: "10px 14px", fontSize: 12, color: "#8A3316", marginBottom: 12 }}>
+            ⚠️ {syncError}
+          </div>
+        )}
       </div>
 
       <div style={{ padding: "0 16px 32px" }}>
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "60px 20px", color: COLORS.muted, fontSize: 14 }}>
+            Sincronizzazione con il foglio in corso...
+          </div>
+        ) : filtered.length === 0 ? (
           <div style={{ textAlign: "center", padding: "60px 20px" }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
             <p style={{ color: COLORS.muted, fontSize: 15 }}>Nessuna ricetta trovata</p>
